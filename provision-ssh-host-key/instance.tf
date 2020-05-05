@@ -43,6 +43,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y rsync htop tcpdump tcpflow unz
 
 # region SSH host key
 # Inject host keys
+umask 077
 echo '${tls_private_key.host-ecdsa.private_key_pem}' >/etc/ssh/ssh_host_ecdsa_key
 echo '${tls_private_key.host-rsa.private_key_pem}' >/etc/ssh/ssh_host_rsa_key
 sed -i -e 's/#HostKey \/etc\/ssh\/ssh_host_rsa_key/HostKey \/etc\/ssh\/ssh_host_rsa_key/' /etc/ssh/sshd_config
@@ -59,11 +60,25 @@ sed -i -e 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/ssh
 # endregion
 
 # region SSH port change
+ufw allow ${var.ssh_port}/tcp
 sed -i -e 's/#Port 22/Port ${var.ssh_port}/' /etc/ssh/sshd_config
 # endregion
 
-# region Reboot
+# region Prevent Metadata server access
+cat /etc/ufw/before.rules | perl -0pe "s/\n# don't delete the 'COMMIT' line or these rules won't be processed\nCOMMIT\n/
+# prevent Exoscale metadata server access
+-A ufw-before-output -m owner ! --uid-owner 0 -d 169.254.169.254 -j REJECT
 
+# don't delete the 'COMMIT' line or these rules won't be processed
+COMMIT
+/"
+# endregion
+
+# region UFW
+ufw enable
+# endregion
+
+# region Reboot
 # Reboot to apply updates and restart SSH
 reboot --reboot
 # endregion
